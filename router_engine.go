@@ -46,7 +46,10 @@ func (e engineFactory) NewEngine(cfg config.ServiceConfig, l logging.Logger, w i
 
 // zapLogger returns a zap logger middleware.
 func zapLogger() gin.HandlerFunc {
-	logger, _ := zap.NewProduction()
+	logCfg := zap.NewProductionConfig()
+	logCfg.EncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	logCfg.EncoderConfig.EncodeDuration = zapcore.MillisDurationEncoder
+	logger, _ := logCfg.Build()
 
 	// TODO: populate with skipped paths via config
 	var skip map[string]struct{}
