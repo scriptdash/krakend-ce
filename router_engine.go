@@ -76,7 +76,9 @@ func zapLogger() gin.HandlerFunc {
 				zap.String("ip", c.ClientIP()),
 				zap.String("method", c.Request.Method),
 				zap.String("path", path),
+				zap.String("request_id", c.Request.Header.Get("X-Request-Id")),
 				zap.Int("status", status),
+				zap.String("trace_id", c.Request.Header.Get("traceparent")),
 				zap.String("user_agent", c.Request.UserAgent()),
 			}
 			if len(c.Errors) > 0 {
