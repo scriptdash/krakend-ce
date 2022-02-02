@@ -24,10 +24,12 @@ jobs:
             else
               image="krakend-ce/branch"
             fi
-            docker buildx build \
+            docker build \
             -t artifactory.infra.alto.com/alto-docker/${image}:${CIRCLE_SHA1} \
             -t artifactory.infra.alto.com/alto-docker/${image}:latest \
-            --push --progress=plain .
+            . && \
+            docker push artifactory.infra.alto.com/alto-docker/${image}:${CIRCLE_SHA1} && \
+            docker push artifactory.infra.alto.com/alto-docker/${image}:latest
 
 workflows:
   version: 2
