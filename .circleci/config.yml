@@ -18,6 +18,7 @@ jobs:
           name: Build Image
           no_output_timeout: 20m
           command: |
+            docker login -u "$KRAKEND_CE_ARTIFACTORY_USER" -p "$KRAKEND_CE_ARTIFACTORY_APIKEY" https://artifactory.infra.alto.com
             if [ "$CIRCLE_BRANCH" = "master" ]; then
               image="krakend-ce"
             else
@@ -26,8 +27,6 @@ jobs:
             docker buildx build \
             -t artifactory.infra.alto.com/alto-docker/${image}:${CIRCLE_SHA1} \
             -t artifactory.infra.alto.com/alto-docker/${image}:latest \
-            --build-arg ALTO_ARTIFACTORY_USER="${KRAKEND_CE_ARTIFACTORY_USER}" \
-            --build-arg ALTO_ARTIFACTORY_APIKEY="${KRAKEND_CE_ARTIFACTORY_APIKEY}" \
             --push --progress=plain .
  
 workflows:
