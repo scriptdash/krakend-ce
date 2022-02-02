@@ -71,7 +71,7 @@ update_krakend_deps:
 	go get github.com/devopsfaith/krakend-martian@v1.4.0
 	go get github.com/devopsfaith/krakend-metrics@v1.4.0
 	go get github.com/devopsfaith/krakend-oauth2-clientcredentials@v1.4.0
-	go get github.com/devopsfaith/krakend-opencensus@v1.4.1
+	go get github.com/scriptdash/krakend-opencensus@e941e98959f1caa4f36b4296a18951f4849b1c89
 	go get github.com/devopsfaith/krakend-pubsub@v1.4.0
 	go get github.com/devopsfaith/krakend-ratelimit@v1.4.0
 	go get github.com/devopsfaith/krakend-rss@v1.4.0

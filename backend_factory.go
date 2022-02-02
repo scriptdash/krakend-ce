@@ -12,7 +12,6 @@ import (
 	martian "github.com/devopsfaith/krakend-martian"
 	metrics "github.com/devopsfaith/krakend-metrics/gin"
 	oauth2client "github.com/devopsfaith/krakend-oauth2-clientcredentials"
-	opencensus "github.com/devopsfaith/krakend-opencensus"
 	pubsub "github.com/devopsfaith/krakend-pubsub"
 	juju "github.com/devopsfaith/krakend-ratelimit/juju/proxy"
 	"github.com/luraproject/lura/config"
@@ -20,6 +19,7 @@ import (
 	"github.com/luraproject/lura/proxy"
 	"github.com/luraproject/lura/transport/http/client"
 	httprequestexecutor "github.com/luraproject/lura/transport/http/client/plugin"
+	opencensus "github.com/scriptdash/krakend-opencensus"
 )
 
 // NewBackendFactory creates a BackendFactory by stacking all the available middlewares:
