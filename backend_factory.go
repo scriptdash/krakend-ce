@@ -60,7 +60,7 @@ func NewBackendFactoryWithContext(ctx context.Context, logger logging.Logger, me
 	backendFactory = juju.BackendFactory(backendFactory)
 	backendFactory = cb.BackendFactory(backendFactory, logger)
 	backendFactory = metricCollector.BackendFactory("backend", backendFactory)
-	backendFactory = opencensus.BackendFactory(backendFactory)
+	//backendFactory = opencensus.BackendFactory(backendFactory)
 	return backendFactory
 }
 
