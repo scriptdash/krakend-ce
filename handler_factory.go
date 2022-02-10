@@ -9,7 +9,6 @@ import (
 	juju "github.com/devopsfaith/krakend-ratelimit/juju/router/gin"
 	"github.com/luraproject/lura/logging"
 	router "github.com/luraproject/lura/router/gin"
-	opencensus "github.com/scriptdash/krakend-opencensus/router/gin"
 )
 
 // NewHandlerFactory returns a HandlerFactory with a rate-limit and a metrics collector middleware injected
@@ -18,7 +17,7 @@ func NewHandlerFactory(logger logging.Logger, metricCollector *metrics.Metrics, 
 	handlerFactory = lua.HandlerFactory(logger, handlerFactory)
 	handlerFactory = ginjose.HandlerFactory(handlerFactory, logger, rejecter)
 	handlerFactory = metricCollector.NewHTTPHandlerFactory(handlerFactory)
-	handlerFactory = opencensus.New(handlerFactory)
+	//handlerFactory = opencensus.New(handlerFactory)
 	handlerFactory = botdetector.New(handlerFactory, logger)
 	return handlerFactory
 }
