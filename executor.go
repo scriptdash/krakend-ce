@@ -8,14 +8,11 @@ import (
 	"os"
 	"time"
 
-	krakendbf "github.com/devopsfaith/bloomfilter/krakend"
-	cel "github.com/devopsfaith/krakend-cel"
 	cmd "github.com/devopsfaith/krakend-cobra"
 	cors "github.com/devopsfaith/krakend-cors/gin"
 	gelf "github.com/devopsfaith/krakend-gelf"
 	gologging "github.com/devopsfaith/krakend-gologging"
 	influxdb "github.com/devopsfaith/krakend-influx"
-	jose "github.com/devopsfaith/krakend-jose"
 	logstash "github.com/devopsfaith/krakend-logstash"
 	metrics "github.com/devopsfaith/krakend-metrics/gin"
 	pubsub "github.com/devopsfaith/krakend-pubsub"
@@ -38,6 +35,11 @@ import (
 	_ "github.com/scriptdash/krakend-opencensus/exporter/stackdriver"
 	_ "github.com/scriptdash/krakend-opencensus/exporter/xray"
 	_ "github.com/scriptdash/krakend-opencensus/exporter/zipkin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 // NewExecutor returns an executor for the cmd package. The executor initalizes the entire gateway by
@@ -58,12 +60,6 @@ type PluginLoader interface {
 // service discover clients
 type SubscriberFactoriesRegister interface {
 	Register(context.Context, config.ServiceConfig, logging.Logger) func(string, int)
-}
-
-// TokenRejecterFactory returns a jose.ChainedRejecterFactory containing all the required jose.RejecterFactory.
-// It also should setup and manage any service related to the management of the revocation process, if required.
-type TokenRejecterFactory interface {
-	NewTokenRejecter(context.Context, config.ServiceConfig, logging.Logger, func(string, int)) (jose.ChainedRejecterFactory, error)
 }
 
 // MetricsAndTracesRegister registers the defined observability components and returns a metrics collector,
@@ -89,7 +85,7 @@ type BackendFactory interface {
 
 // HandlerFactory returns a KrakenD router handler factory, ready to be passed to the KrakenD RouterFactory
 type HandlerFactory interface {
-	NewHandlerFactory(logging.Logger, *metrics.Metrics, jose.RejecterFactory) router.HandlerFactory
+	NewHandlerFactory(logging.Logger, *metrics.Metrics) router.HandlerFactory
 }
 
 // LoggerFactory returns a KrakenD Logger factory, ready to be passed to the KrakenD RouterFactory
@@ -110,7 +106,6 @@ type ExecutorBuilder struct {
 	LoggerFactory               LoggerFactory
 	PluginLoader                PluginLoader
 	SubscriberFactoriesRegister SubscriberFactoriesRegister
-	TokenRejecterFactory        TokenRejecterFactory
 	MetricsAndTracesRegister    MetricsAndTracesRegister
 	EngineFactory               EngineFactory
 	ProxyFactory                ProxyFactory
@@ -128,6 +123,10 @@ type ExecutorBuilder struct {
 func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 	e.checkCollaborators()
 
+	e.Middlewares = []gin.HandlerFunc{
+		otelgin.Middleware("krakend"),
+	}
+
 	return func(cfg config.ServiceConfig) {
 		logger, gelfWriter, gelfErr := e.LoggerFactory.NewLogger(cfg)
 		if gelfErr != nil {
@@ -135,7 +134,7 @@ func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 		}
 
 		logger.Info("Listening on port:", cfg.Port)
-
+		initTracer(logger, cfg)
 		startReporter(ctx, logger, cfg)
 
 		if cfg.Plugin != nil {
@@ -143,16 +142,6 @@ func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 		}
 
 		metricCollector := e.MetricsAndTracesRegister.Register(ctx, cfg, logger)
-
-		tokenRejecterFactory, err := e.TokenRejecterFactory.NewTokenRejecter(
-			ctx,
-			cfg,
-			logger,
-			e.SubscriberFactoriesRegister.Register(ctx, cfg, logger),
-		)
-		if err != nil {
-			logger.Warning("bloomFilter:", err.Error())
-		}
 
 		// setup the krakend router
 		routerFactory := router.NewFactory(router.Config{
@@ -164,7 +153,7 @@ func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 			),
 			Middlewares:    e.Middlewares,
 			Logger:         logger,
-			HandlerFactory: e.HandlerFactory.NewHandlerFactory(logger, metricCollector, tokenRejecterFactory),
+			HandlerFactory: e.HandlerFactory.NewHandlerFactory(logger, metricCollector),
 			RunServer:      router.RunServerFunc(e.RunServerFactory.NewRunServer(logger, krakendrouter.RunServer)),
 		})
 
@@ -179,9 +168,6 @@ func (e *ExecutorBuilder) checkCollaborators() {
 	}
 	if e.SubscriberFactoriesRegister == nil {
 		e.SubscriberFactoriesRegister = new(registerSubscriberFactories)
-	}
-	if e.TokenRejecterFactory == nil {
-		e.TokenRejecterFactory = new(BloomFilterJWT)
 	}
 	if e.MetricsAndTracesRegister == nil {
 		e.MetricsAndTracesRegister = new(MetricsAndTraces)
@@ -255,27 +241,6 @@ func (LoggerBuilder) NewLogger(cfg config.ServiceConfig) (logging.Logger, io.Wri
 	return logger, gelfWriter, nil
 }
 
-// BloomFilterJWT is the default TokenRejecterFactory implementation.
-type BloomFilterJWT struct{}
-
-// NewTokenRejecter registers the bloomfilter component and links it to a token rejecter. Then it returns a chained
-// rejecter factory with the created token rejecter and other based on the CEL component.
-func (t BloomFilterJWT) NewTokenRejecter(ctx context.Context, cfg config.ServiceConfig, l logging.Logger, reg func(n string, p int)) (jose.ChainedRejecterFactory, error) {
-	rejecter, err := krakendbf.Register(ctx, "krakend-bf", cfg, l, reg)
-
-	return jose.ChainedRejecterFactory([]jose.RejecterFactory{
-		jose.RejecterFactoryFunc(func(_ logging.Logger, _ *config.EndpointConfig) jose.Rejecter {
-			return jose.RejecterFunc(rejecter.RejectToken)
-		}),
-		jose.RejecterFactoryFunc(func(l logging.Logger, cfg *config.EndpointConfig) jose.Rejecter {
-			if r := cel.NewRejecter(l, cfg); r != nil {
-				return r
-			}
-			return jose.FixedRejecter(false)
-		}),
-	}), err
-}
-
 // MetricsAndTraces is the default implementation of the MetricsAndTracesRegister interface.
 type MetricsAndTraces struct{}
 
@@ -325,6 +290,42 @@ func startReporter(ctx context.Context, logger logging.Logger, cfg config.Servic
 			logger.Warning("unable to create the usage report client:", err.Error())
 		}
 	}()
+}
+
+func initTracer(logger logging.Logger, cfg config.ServiceConfig) *trace.TracerProvider {
+	extraCfg, ok := cfg.ExtraConfig["github_com/scriptdash/krakend-ce"].(map[string]interface{})
+	if !ok {
+		logger.Info("skipping tracer initialization: no config found")
+		return nil
+	}
+	exporterCfg, ok := extraCfg["exporters"].(map[string]interface{})
+	if !ok {
+		logger.Info("skipping tracer initialization: no exporter config found")
+	}
+
+	jaegerCfg, ok := exporterCfg["jaeger"].(map[string]interface{})
+	if !ok {
+		logger.Info("skipping tracer initialization: jaeger config not found")
+		return nil
+	}
+	endpoint, ok := jaegerCfg["endpoint"].(string)
+	if !ok {
+		logger.Info("skipping tracer initialization: jaeger endpoint not found")
+	}
+
+	exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(endpoint)))
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	tp := trace.NewTracerProvider(
+		trace.WithSampler(trace.AlwaysSample()),
+		trace.WithBatcher(exporter),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	return tp
 }
 
 type gelfWriterWrapper struct {
