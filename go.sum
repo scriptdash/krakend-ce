@@ -321,8 +321,6 @@ github.com/devopsfaith/krakend-httpsecure v1.4.0 h1:8VCiJc2U4KGWMF7T7rkn0mAMYRe+
 github.com/devopsfaith/krakend-httpsecure v1.4.0/go.mod h1:7yPOoA9vD8DEbJaI/972kcTBnKVh9kbaVGCR0bqcHdM=
 github.com/devopsfaith/krakend-influx v1.4.0 h1:cRCOV01pp+ZM3nBSQqzHIIFmncqhn+dQr/zFllOPj4M=
 github.com/devopsfaith/krakend-influx v1.4.0/go.mod h1:EHq/ZXawgM/Cc7usySi6aVvGbxNdV/dx+kxk0TAje1Q=
-github.com/devopsfaith/krakend-jsonschema v1.4.0 h1:tjI5VfldchCKk+K/8wvwGW5Gdyv2040AbiIiJinBWyA=
-github.com/devopsfaith/krakend-jsonschema v1.4.0/go.mod h1:cW2y/mxMjOoC/62JjlQQXgGS9q9qC4Cb+DI+lpH+RZg=
 github.com/devopsfaith/krakend-lambda v1.4.0 h1:EBWtC/Lrl7Ff5sWXh9m1jhxrihM7Jag40GEJg1muP+k=
 github.com/devopsfaith/krakend-lambda v1.4.0/go.mod h1:tn65EufxYp4tjie1cSOzUfY5Q57YSCOkLcoNrZdDzbs=
 github.com/devopsfaith/krakend-logstash v1.4.0 h1:JVbJfn0eznp5t9AN9Bjx3FM/pBUYUcktfax/5S1ZhPI=
@@ -1111,12 +1109,6 @@ github.com/willf/bitset v1.1.9/go.mod h1:RjeCKbqT1RxIR/KWY6phxZiaY1IyutSBfGjNPyS
 github.com/xanzy/ssh-agent v0.2.0/go.mod h1:0NyE30eGUDliuLEHJgYte/zncp2zdTStcOnWhgSqHD8=
 github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c/go.mod h1:lB8K/P019DLNhemzwFU4jHLhdvlE6uDZjXFejJXr49I=
 github.com/xdg/stringprep v1.0.0/go.mod h1:Jhud4/sHMO4oL310DaZAKk9ZaJ08SJfe+sJh0HrGL1Y=
-github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f h1:J9EGpcZtP0E/raorCMxlFGSTBrsSlaDGf3jU/qvAE2c=
-github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f/go.mod h1:N2zxlSyiKSe5eX1tZViRH5QA0qijqEDrYZiPEAiq3wU=
-github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 h1:EzJWgHovont7NscjpAxXsDA8S8BMYve8Y5+7cuRE7R0=
-github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415/go.mod h1:GwrjFmJcFw6At/Gs6z4yjiIwzuJ1/+UwLxMQDVQXShQ=
-github.com/xeipuuv/gojsonschema v1.2.1-0.20200424115421-065759f9c3d7 h1:tdnG+ZILOafvA29+pYKP3gauEbigHll3PHsf1GQa2ms=
-github.com/xeipuuv/gojsonschema v1.2.1-0.20200424115421-065759f9c3d7/go.mod h1:anYRn/JVcOK2ZgGU+IjEV4nwlhoK5sQluxsYJ78Id3Y=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=
 github.com/yudai/gojsondiff v1.0.0/go.mod h1:AY32+k2cwILAkW1fbgxQ5mUmMiZFgLIV+FBNExI05xg=
