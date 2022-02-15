@@ -5,7 +5,6 @@ import (
 
 	httpcache "github.com/devopsfaith/krakend-httpcache"
 	martian "github.com/devopsfaith/krakend-martian"
-	metrics "github.com/devopsfaith/krakend-metrics/gin"
 	oauth2client "github.com/devopsfaith/krakend-oauth2-clientcredentials"
 	"github.com/luraproject/lura/config"
 	"github.com/luraproject/lura/logging"
@@ -27,12 +26,12 @@ import (
 // - circuit breaker
 // - metrics collector
 // - opencensus collector
-func NewBackendFactory(logger logging.Logger, metricCollector *metrics.Metrics) proxy.BackendFactory {
-	return NewBackendFactoryWithContext(context.Background(), logger, metricCollector)
+func NewBackendFactory(logger logging.Logger) proxy.BackendFactory {
+	return NewBackendFactoryWithContext(context.Background(), logger)
 }
 
 // NewBackendFactory creates a BackendFactory by stacking all the available middlewares and injecting the received context
-func NewBackendFactoryWithContext(ctx context.Context, logger logging.Logger, metricCollector *metrics.Metrics) proxy.BackendFactory {
+func NewBackendFactoryWithContext(ctx context.Context, logger logging.Logger) proxy.BackendFactory {
 	requestExecutorFactory := func(cfg *config.Backend) client.HTTPRequestExecutor {
 		var clientFactory client.HTTPClientFactory
 		if _, ok := cfg.ExtraConfig[oauth2client.Namespace]; ok {
@@ -44,12 +43,11 @@ func NewBackendFactoryWithContext(ctx context.Context, logger logging.Logger, me
 	}
 	requestExecutorFactory = httprequestexecutor.HTTPRequestExecutor(logger, requestExecutorFactory)
 	backendFactory := martian.NewConfiguredBackendFactory(logger, requestExecutorFactory)
-	backendFactory = metricCollector.BackendFactory("backend", backendFactory)
 	return backendFactory
 }
 
 type backendFactory struct{}
 
-func (b backendFactory) NewBackendFactory(ctx context.Context, l logging.Logger, m *metrics.Metrics) proxy.BackendFactory {
-	return NewBackendFactoryWithContext(ctx, l, m)
+func (b backendFactory) NewBackendFactory(ctx context.Context, l logging.Logger) proxy.BackendFactory {
+	return NewBackendFactoryWithContext(ctx, l)
 }
