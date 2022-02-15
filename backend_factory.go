@@ -3,17 +3,10 @@ package krakend
 import (
 	"context"
 
-	amqp "github.com/devopsfaith/krakend-amqp"
-	cel "github.com/devopsfaith/krakend-cel"
-	cb "github.com/devopsfaith/krakend-circuitbreaker/gobreaker/proxy"
 	httpcache "github.com/devopsfaith/krakend-httpcache"
-	lambda "github.com/devopsfaith/krakend-lambda"
-	lua "github.com/devopsfaith/krakend-lua/proxy"
 	martian "github.com/devopsfaith/krakend-martian"
 	metrics "github.com/devopsfaith/krakend-metrics/gin"
 	oauth2client "github.com/devopsfaith/krakend-oauth2-clientcredentials"
-	pubsub "github.com/devopsfaith/krakend-pubsub"
-	juju "github.com/devopsfaith/krakend-ratelimit/juju/proxy"
 	"github.com/luraproject/lura/config"
 	"github.com/luraproject/lura/logging"
 	"github.com/luraproject/lura/proxy"
@@ -51,16 +44,7 @@ func NewBackendFactoryWithContext(ctx context.Context, logger logging.Logger, me
 	}
 	requestExecutorFactory = httprequestexecutor.HTTPRequestExecutor(logger, requestExecutorFactory)
 	backendFactory := martian.NewConfiguredBackendFactory(logger, requestExecutorFactory)
-	bf := pubsub.NewBackendFactory(ctx, logger, backendFactory)
-	backendFactory = bf.New
-	backendFactory = amqp.NewBackendFactory(ctx, logger, backendFactory)
-	backendFactory = lambda.BackendFactory(backendFactory)
-	backendFactory = cel.BackendFactory(logger, backendFactory)
-	backendFactory = lua.BackendFactory(logger, backendFactory)
-	backendFactory = juju.BackendFactory(backendFactory)
-	backendFactory = cb.BackendFactory(backendFactory, logger)
 	backendFactory = metricCollector.BackendFactory("backend", backendFactory)
-	backendFactory = opencensus.BackendFactory(backendFactory)
 	return backendFactory
 }
 

@@ -4,12 +4,14 @@ import (
 	metrics "github.com/devopsfaith/krakend-metrics/gin"
 	"github.com/luraproject/lura/logging"
 	"github.com/luraproject/lura/proxy"
+	"github.com/scriptdash/lura-otel/otelgin"
 )
 
 // NewProxyFactory returns a new ProxyFactory wrapping the injected BackendFactory with the default proxy stack and a metrics collector
 func NewProxyFactory(logger logging.Logger, backendFactory proxy.BackendFactory, metricCollector *metrics.Metrics) proxy.Factory {
 	proxyFactory := proxy.NewDefaultFactory(backendFactory, logger)
 	proxyFactory = metricCollector.ProxyFactory("pipe", proxyFactory)
+	proxyFactory = otelgin.NewProxyFactory(proxyFactory)
 	return proxyFactory
 }
 

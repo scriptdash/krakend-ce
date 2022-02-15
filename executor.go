@@ -35,7 +35,6 @@ import (
 	_ "github.com/scriptdash/krakend-opencensus/exporter/stackdriver"
 	_ "github.com/scriptdash/krakend-opencensus/exporter/xray"
 	_ "github.com/scriptdash/krakend-opencensus/exporter/zipkin"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/propagation"
@@ -122,10 +121,6 @@ type ExecutorBuilder struct {
 // Every nil collaborator is replaced by the default one offered by this package.
 func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 	e.checkCollaborators()
-
-	e.Middlewares = []gin.HandlerFunc{
-		otelgin.Middleware("krakend"),
-	}
 
 	return func(cfg config.ServiceConfig) {
 		logger, gelfWriter, gelfErr := e.LoggerFactory.NewLogger(cfg)

@@ -3,10 +3,7 @@ module github.com/devopsfaith/krakend-ce
 go 1.12
 
 require (
-	github.com/devopsfaith/krakend-amqp v1.4.0
 	github.com/devopsfaith/krakend-botdetector v1.4.0
-	github.com/devopsfaith/krakend-cel v1.4.0
-	github.com/devopsfaith/krakend-circuitbreaker v1.4.0
 	github.com/devopsfaith/krakend-cobra v1.4.0
 	github.com/devopsfaith/krakend-consul v1.4.0
 	github.com/devopsfaith/krakend-cors v1.4.0
@@ -16,14 +13,12 @@ require (
 	github.com/devopsfaith/krakend-httpcache v1.4.0
 	github.com/devopsfaith/krakend-httpsecure v1.4.0
 	github.com/devopsfaith/krakend-influx v1.4.0
-	github.com/devopsfaith/krakend-lambda v1.4.0
 	github.com/devopsfaith/krakend-logstash v1.4.0
 	github.com/devopsfaith/krakend-lua v1.4.0
 	github.com/devopsfaith/krakend-martian v1.4.0
 	github.com/devopsfaith/krakend-metrics v1.4.0
 	github.com/devopsfaith/krakend-oauth2-clientcredentials v1.4.0
 	github.com/devopsfaith/krakend-pubsub v1.4.0
-	github.com/devopsfaith/krakend-ratelimit v1.4.0
 	github.com/devopsfaith/krakend-rss v1.4.0
 	github.com/devopsfaith/krakend-usage v1.4.0
 	github.com/devopsfaith/krakend-viper v1.4.0
@@ -43,8 +38,8 @@ require (
 	github.com/pelletier/go-toml v1.7.0 // indirect
 	github.com/prometheus/common v0.11.1 // indirect
 	github.com/scriptdash/krakend-opencensus v1.4.2-0.20220202010554-e941e98959f1
+	github.com/scriptdash/lura-otel v0.0.2
 	github.com/spf13/pflag v1.0.5 // indirect
-	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.28.0
 	go.opentelemetry.io/otel v1.4.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.4.0
 	go.opentelemetry.io/otel/sdk v1.4.0
