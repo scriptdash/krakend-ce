@@ -27,17 +27,16 @@ import (
 	router "github.com/luraproject/lura/router/gin"
 	server "github.com/luraproject/lura/transport/http/server/plugin"
 	opencensus "github.com/scriptdash/krakend-opencensus"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/datadog"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/influxdb"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/jaeger"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/ocagent"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/prometheus"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/stackdriver"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/xray"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/zipkin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -130,6 +129,7 @@ func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 
 		logger.Info("Listening on port:", cfg.Port)
 		initTracer(logger, cfg)
+		initPrometheusExporter(logger, cfg)
 		startReporter(ctx, logger, cfg)
 
 		if cfg.Plugin != nil {
@@ -321,6 +321,34 @@ func initTracer(logger logging.Logger, cfg config.ServiceConfig) *trace.TracerPr
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	return tp
+}
+
+func initPrometheusExporter(logger logging.Logger, cfg config.ServiceConfig) *otelprom.Exporter {
+	otelCfg := otelprom.Config{}
+
+	ctrl := controller.New(
+		processor.NewFactory(
+			selector.NewWithHistogramDistribution(
+				histogram.WithExplicitBoundaries(otelCfg.DefaultHistogramBoundaries),
+			),
+			aggregation.CumulativeTemporalitySelector(),
+			processor.WithMemory(true),
+		),
+	)
+
+	exporter, err := otelprom.New(otelCfg, ctrl)
+	if err != nil {
+		return nil
+	}
+
+	global.SetMeterProvider(exporter.MeterProvider())
+
+	http.HandleFunc("/metrics", exporter.ServeHTTP)
+	go func() {
+		_ = http.ListenAndServe(":9091", nil)
+	}()
+
+	return exporter
 }
 
 type gelfWriterWrapper struct {
