@@ -1,6 +1,6 @@
 FROM debian:buster-slim
 
-RUN apt-get update && apt-get install -y curl gcc
+RUN apt-get update && apt-get install -y curl gcc git
 RUN curl https://storage.googleapis.com/golang/go1.17.4.linux-amd64.tar.gz | tar xzf - -C /usr/local
 
 ENV GOPATH /go
