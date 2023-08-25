@@ -2,42 +2,35 @@ package krakend
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"time"
 
-	krakendbf "github.com/devopsfaith/bloomfilter/krakend"
-	cel "github.com/devopsfaith/krakend-cel"
 	cmd "github.com/devopsfaith/krakend-cobra"
 	cors "github.com/devopsfaith/krakend-cors/gin"
 	gelf "github.com/devopsfaith/krakend-gelf"
 	gologging "github.com/devopsfaith/krakend-gologging"
-	influxdb "github.com/devopsfaith/krakend-influx"
-	jose "github.com/devopsfaith/krakend-jose"
 	logstash "github.com/devopsfaith/krakend-logstash"
-	metrics "github.com/devopsfaith/krakend-metrics/gin"
-	pubsub "github.com/devopsfaith/krakend-pubsub"
-	"github.com/devopsfaith/krakend-usage/client"
 	"github.com/gin-gonic/gin"
-	"github.com/go-contrib/uuid"
 	"github.com/luraproject/lura/config"
-	"github.com/luraproject/lura/core"
 	"github.com/luraproject/lura/logging"
 	"github.com/luraproject/lura/proxy"
 	krakendrouter "github.com/luraproject/lura/router"
 	router "github.com/luraproject/lura/router/gin"
 	server "github.com/luraproject/lura/transport/http/server/plugin"
-	opencensus "github.com/scriptdash/krakend-opencensus"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/datadog"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/influxdb"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/jaeger"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/ocagent"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/prometheus"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/stackdriver"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/xray"
-	_ "github.com/scriptdash/krakend-opencensus/exporter/zipkin"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 )
 
 // NewExecutor returns an executor for the cmd package. The executor initalizes the entire gateway by
@@ -60,18 +53,6 @@ type SubscriberFactoriesRegister interface {
 	Register(context.Context, config.ServiceConfig, logging.Logger) func(string, int)
 }
 
-// TokenRejecterFactory returns a jose.ChainedRejecterFactory containing all the required jose.RejecterFactory.
-// It also should setup and manage any service related to the management of the revocation process, if required.
-type TokenRejecterFactory interface {
-	NewTokenRejecter(context.Context, config.ServiceConfig, logging.Logger, func(string, int)) (jose.ChainedRejecterFactory, error)
-}
-
-// MetricsAndTracesRegister registers the defined observability components and returns a metrics collector,
-// if required.
-type MetricsAndTracesRegister interface {
-	Register(context.Context, config.ServiceConfig, logging.Logger) *metrics.Metrics
-}
-
 // EngineFactory returns a gin engine, ready to be passed to the KrakenD RouterFactory
 type EngineFactory interface {
 	NewEngine(config.ServiceConfig, logging.Logger, io.Writer) *gin.Engine
@@ -79,17 +60,17 @@ type EngineFactory interface {
 
 // ProxyFactory returns a KrakenD proxy factory, ready to be passed to the KrakenD RouterFactory
 type ProxyFactory interface {
-	NewProxyFactory(logging.Logger, proxy.BackendFactory, *metrics.Metrics) proxy.Factory
+	NewProxyFactory(logging.Logger, proxy.BackendFactory) proxy.Factory
 }
 
 // BackendFactory returns a KrakenD backend factory, ready to be passed to the KrakenD proxy factory
 type BackendFactory interface {
-	NewBackendFactory(context.Context, logging.Logger, *metrics.Metrics) proxy.BackendFactory
+	NewBackendFactory(context.Context, logging.Logger) proxy.BackendFactory
 }
 
 // HandlerFactory returns a KrakenD router handler factory, ready to be passed to the KrakenD RouterFactory
 type HandlerFactory interface {
-	NewHandlerFactory(logging.Logger, *metrics.Metrics, jose.RejecterFactory) router.HandlerFactory
+	NewHandlerFactory(logging.Logger) router.HandlerFactory
 }
 
 // LoggerFactory returns a KrakenD Logger factory, ready to be passed to the KrakenD RouterFactory
@@ -110,8 +91,6 @@ type ExecutorBuilder struct {
 	LoggerFactory               LoggerFactory
 	PluginLoader                PluginLoader
 	SubscriberFactoriesRegister SubscriberFactoriesRegister
-	TokenRejecterFactory        TokenRejecterFactory
-	MetricsAndTracesRegister    MetricsAndTracesRegister
 	EngineFactory               EngineFactory
 	ProxyFactory                ProxyFactory
 	BackendFactory              BackendFactory
@@ -135,23 +114,11 @@ func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 		}
 
 		logger.Info("Listening on port:", cfg.Port)
-
-		startReporter(ctx, logger, cfg)
+		initTracer(logger, cfg)
+		initPrometheusExporter(logger, cfg)
 
 		if cfg.Plugin != nil {
 			e.PluginLoader.Load(cfg.Plugin.Folder, cfg.Plugin.Pattern, logger)
-		}
-
-		metricCollector := e.MetricsAndTracesRegister.Register(ctx, cfg, logger)
-
-		tokenRejecterFactory, err := e.TokenRejecterFactory.NewTokenRejecter(
-			ctx,
-			cfg,
-			logger,
-			e.SubscriberFactoriesRegister.Register(ctx, cfg, logger),
-		)
-		if err != nil {
-			logger.Warning("bloomFilter:", err.Error())
 		}
 
 		// setup the krakend router
@@ -159,12 +126,11 @@ func (e *ExecutorBuilder) NewCmdExecutor(ctx context.Context) cmd.Executor {
 			Engine: e.EngineFactory.NewEngine(cfg, logger, gelfWriter),
 			ProxyFactory: e.ProxyFactory.NewProxyFactory(
 				logger,
-				e.BackendFactory.NewBackendFactory(ctx, logger, metricCollector),
-				metricCollector,
+				e.BackendFactory.NewBackendFactory(ctx, logger),
 			),
 			Middlewares:    e.Middlewares,
 			Logger:         logger,
-			HandlerFactory: e.HandlerFactory.NewHandlerFactory(logger, metricCollector, tokenRejecterFactory),
+			HandlerFactory: e.HandlerFactory.NewHandlerFactory(logger),
 			RunServer:      router.RunServerFunc(e.RunServerFactory.NewRunServer(logger, krakendrouter.RunServer)),
 		})
 
@@ -179,12 +145,6 @@ func (e *ExecutorBuilder) checkCollaborators() {
 	}
 	if e.SubscriberFactoriesRegister == nil {
 		e.SubscriberFactoriesRegister = new(registerSubscriberFactories)
-	}
-	if e.TokenRejecterFactory == nil {
-		e.TokenRejecterFactory = new(BloomFilterJWT)
-	}
-	if e.MetricsAndTracesRegister == nil {
-		e.MetricsAndTracesRegister = new(MetricsAndTraces)
 	}
 	if e.EngineFactory == nil {
 		e.EngineFactory = new(engineFactory)
@@ -255,76 +215,69 @@ func (LoggerBuilder) NewLogger(cfg config.ServiceConfig) (logging.Logger, io.Wri
 	return logger, gelfWriter, nil
 }
 
-// BloomFilterJWT is the default TokenRejecterFactory implementation.
-type BloomFilterJWT struct{}
-
-// NewTokenRejecter registers the bloomfilter component and links it to a token rejecter. Then it returns a chained
-// rejecter factory with the created token rejecter and other based on the CEL component.
-func (t BloomFilterJWT) NewTokenRejecter(ctx context.Context, cfg config.ServiceConfig, l logging.Logger, reg func(n string, p int)) (jose.ChainedRejecterFactory, error) {
-	rejecter, err := krakendbf.Register(ctx, "krakend-bf", cfg, l, reg)
-
-	return jose.ChainedRejecterFactory([]jose.RejecterFactory{
-		jose.RejecterFactoryFunc(func(_ logging.Logger, _ *config.EndpointConfig) jose.Rejecter {
-			return jose.RejecterFunc(rejecter.RejectToken)
-		}),
-		jose.RejecterFactoryFunc(func(l logging.Logger, cfg *config.EndpointConfig) jose.Rejecter {
-			if r := cel.NewRejecter(l, cfg); r != nil {
-				return r
-			}
-			return jose.FixedRejecter(false)
-		}),
-	}), err
-}
-
-// MetricsAndTraces is the default implementation of the MetricsAndTracesRegister interface.
-type MetricsAndTraces struct{}
-
-// Register registers the metrcis, influx and opencensus packages as required by the given configuration.
-func (MetricsAndTraces) Register(ctx context.Context, cfg config.ServiceConfig, l logging.Logger) *metrics.Metrics {
-	metricCollector := metrics.New(ctx, cfg.ExtraConfig, l)
-
-	if err := influxdb.New(ctx, cfg.ExtraConfig, metricCollector, l); err != nil {
-		l.Warning(err.Error())
+func initTracer(logger logging.Logger, cfg config.ServiceConfig) *trace.TracerProvider {
+	extraCfg, ok := cfg.ExtraConfig["github_com/scriptdash/krakend-ce"].(map[string]interface{})
+	if !ok {
+		logger.Info("skipping tracer initialization: no config found")
+		return nil
+	}
+	exporterCfg, ok := extraCfg["exporters"].(map[string]interface{})
+	if !ok {
+		logger.Info("skipping tracer initialization: no exporter config found")
 	}
 
-	if err := opencensus.Register(ctx, cfg, append(opencensus.DefaultViews, pubsub.OpenCensusViews...)...); err != nil {
-		l.Warning("opencensus:", err.Error())
+	jaegerCfg, ok := exporterCfg["jaeger"].(map[string]interface{})
+	if !ok {
+		logger.Info("skipping tracer initialization: jaeger config not found")
+		return nil
+	}
+	endpoint, ok := jaegerCfg["endpoint"].(string)
+	if !ok {
+		logger.Info("skipping tracer initialization: jaeger endpoint not found")
 	}
 
-	return metricCollector
-}
-
-const (
-	usageDisable = "USAGE_DISABLE"
-	usageDelay   = 5 * time.Second
-)
-
-func startReporter(ctx context.Context, logger logging.Logger, cfg config.ServiceConfig) {
-	if os.Getenv(usageDisable) == "1" {
-		logger.Info("usage report client disabled")
-		return
-	}
-
-	clusterID, err := cfg.Hash()
+	exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(endpoint)))
 	if err != nil {
-		logger.Warning("unable to hash the service configuration:", err.Error())
-		return
+		logger.Fatal(err)
 	}
 
+	tp := trace.NewTracerProvider(
+		trace.WithSampler(trace.AlwaysSample()),
+		trace.WithBatcher(exporter),
+		trace.WithResource(resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String("api-gateway"))),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	return tp
+}
+
+func initPrometheusExporter(logger logging.Logger, cfg config.ServiceConfig) *otelprom.Exporter {
+	otelCfg := otelprom.Config{}
+
+	ctrl := controller.New(
+		processor.NewFactory(
+			selector.NewWithHistogramDistribution(
+				histogram.WithExplicitBoundaries(otelCfg.DefaultHistogramBoundaries),
+			),
+			aggregation.CumulativeTemporalitySelector(),
+			processor.WithMemory(true),
+		),
+	)
+
+	exporter, err := otelprom.New(otelCfg, ctrl)
+	if err != nil {
+		return nil
+	}
+
+	global.SetMeterProvider(exporter.MeterProvider())
+
+	http.HandleFunc("/metrics", exporter.ServeHTTP)
 	go func() {
-		time.Sleep(usageDelay)
-
-		serverID := uuid.NewV4().String()
-		logger.Info(fmt.Sprintf("registering usage stats for cluster ID '%s'", clusterID))
-
-		if err := client.StartReporter(ctx, client.Options{
-			ClusterID: clusterID,
-			ServerID:  serverID,
-			Version:   core.KrakendVersion,
-		}); err != nil {
-			logger.Warning("unable to create the usage report client:", err.Error())
-		}
+		_ = http.ListenAndServe(":9091", nil)
 	}()
+
+	return exporter
 }
 
 type gelfWriterWrapper struct {
